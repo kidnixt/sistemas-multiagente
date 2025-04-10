@@ -10,9 +10,12 @@ class FictitiousPlay(Agent):
         super().__init__(game=game, agent=agent)
         np.random.seed(seed=seed)
         
-        self.count: dict[AgentID, ndarray] = {}
-        for agent in self.game.agents:
-            self.count[agent] = np.random.randint(low=1, high=5, size=self.game.num_actions(agent))
+        if initial is not None:
+            self.count = initial.copy()
+        else:
+            self.count: dict[AgentID, ndarray] = {}
+            for agent in self.game.agents:
+                self.count[agent] = np.random.randint(low=1, high=5, size=self.game.num_actions(agent))
                 
         self.learned_policy: dict[AgentID, ndarray] = {}
         for agent in self.game.agents:
