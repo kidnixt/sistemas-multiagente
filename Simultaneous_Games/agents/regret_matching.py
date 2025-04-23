@@ -19,6 +19,7 @@ class RegretMatching(Agent):
         np.random.seed(seed=seed)
 
     def regrets(self, played_actions: ActionDict) -> dict[AgentID, float]:
+        
         actions = played_actions.copy() # Accion conjunta
         a = actions[self.agent]
         g = self.game.clone()
@@ -28,22 +29,39 @@ class RegretMatching(Agent):
         g.step(actions)
         r_base = g.rewards[self.agent]
 
-        # Calcular los rewards de agente para cada acción conjunta
+
         for act in range(g.num_actions(self.agent)):
             g.reset()
-            actions[self.agent] = act
-            g.step(actions)
+            counterfactual_actions = actions.copy() #HACEMOS UN COPY PARA QUE NO SEA ACUMULATIVO
+            counterfactual_actions[self.agent] = act
+            g.step(counterfactual_actions)
             r = g.rewards[self.agent]
             u[act] = r - r_base
+
+        # Calcular los rewards de agente para cada acción conjunta
+        #for act in range(g.num_actions(self.agent)):
+        #    g.reset()
+        #    actions[self.agent] = act
+        #    g.step(actions)
+        #    r = g.rewards[self.agent]
+        #    u[act] = r - r_base
         
         return u
     
     def regret_matching(self):
         random = np.full(self.game.num_actions(self.agent), 1/self.game.num_actions(self.agent))
-        if np.sum(self.cum_regrets) <= 0:
+
+        sum_positive_regrets = np.sum(np.maximum(self.cum_regrets, 0))
+
+        if sum_positive_regrets <= 0:
             self.curr_policy = random
         else:
-            self.curr_policy = np.maximum(self.cum_regrets,0)/np.sum(np.maximum(self.cum_regrets,0))
+            self.curr_policy = np.maximum(self.cum_regrets, 0) / sum_positive_regrets
+
+        # if np.sum(self.cum_regrets) <= 0:
+        #     self.curr_policy = random
+        # else:
+        #     self.curr_policy = np.maximum(self.cum_regrets,0)/np.sum(np.maximum(self.cum_regrets,0))
 
         self.sum_policy += self.curr_policy
 
