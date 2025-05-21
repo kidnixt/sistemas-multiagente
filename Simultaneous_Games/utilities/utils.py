@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns  # Importar seaborn para obtener paletas de colores
 
 def run_and_plot(agent_combination: dict, game, num_iterations=1000, title_suffix=""):
     """
     Ejecuta un experimento multi-agente y grafica la evolución de las políticas.
-    Muestra todas las políticas en subplots horizontales del mismo tamaño.
+    Muestra todas las políticas en subplots horizontales del mismo tamaño,
+    utilizando colores distintos para cada acción en cada subplot.
 
     Parameters:
     - agent_combination: dict agent_id -> instancia del agente (FictitiousPlay, RegretMatching, etc.)
@@ -14,6 +16,7 @@ def run_and_plot(agent_combination: dict, game, num_iterations=1000, title_suffi
 
     Returns:
     - policies: dict agent_id -> np.array (iteraciones x acciones)
+    - action_history: dict agent_id -> list de acciones tomadas
     """
     game.reset()
     agents = list(agent_combination.keys())
@@ -23,14 +26,12 @@ def run_and_plot(agent_combination: dict, game, num_iterations=1000, title_suffi
     policies = {agent: [agent_combination[agent].policy().copy()] for agent in agents}
     action_history = {agent: [] for agent in agents}
 
-
     for _ in range(num_iterations):
         actions = {agent: agent_combination[agent].action() for agent in agents}
         game.step(actions)
         for agent in agents:
             policies[agent].append(agent_combination[agent].policy().copy())
             action_history[agent].append(actions[agent])
-
 
     # Convertir listas a arrays
     for agent in policies:
@@ -42,16 +43,22 @@ def run_and_plot(agent_combination: dict, game, num_iterations=1000, title_suffi
     if num_agents == 1:
         axs = [axs]  # manejar caso especial con un solo subplot
 
+    # Definir una paleta de colores lo suficientemente grande
+    num_total_actions = max(policy.shape[1] for policy in policies.values())
+    colors = sns.color_palette( "tab20",n_colors=num_total_actions)
+
     for idx, agent in enumerate(agents):
         policy_matrix = policies[agent]
         ax = axs[idx]
-        for action in range(policy_matrix.shape[1]):
+        num_actions = policy_matrix.shape[1]
+        for action in range(num_actions):
             ax.plot(
                 range(num_iterations + 1),
                 policy_matrix[:, action],
                 label=f'Action {action + 1}',
                 marker='o',
-                linewidth=1
+                linewidth=1,
+                color=colors[action % num_total_actions]  # Asignar color usando el índice de la acción
             )
         ax.set_title(f'{agent} {title_suffix}')
         ax.set_xlabel('Iteration')
@@ -66,17 +73,17 @@ def run_and_plot(agent_combination: dict, game, num_iterations=1000, title_suffi
     return policies, action_history
 
 
-
 import matplotlib.pyplot as plt
 import numpy as np
 
 def plot_convergence_to_nash(policies: dict, nash_equilibrium: dict, title_suffix=""):
     """
-    Grafica la diferencia por acción respecto al equilibrio de Nash, usando subplots horizontales.
+    Grafica la diferencia por acción respecto al equilibrio de Nash, usando la misma paleta de colores
+    que run_and_plot ("tab20") para garantizar consistencia visual.
 
     Parameters:
     - policies: dict[agent_id] -> np.array (iteraciones x acciones)
-    - nash_equilibrium: dict[agent_id] -> lista con probabilidad de cada acción (ej: [0.5, 0.5])
+    - nash_equilibrium: dict[agent_id] -> lista con probabilidad de cada acción (ej: [0.5, 0.5, ...])
     - title_suffix: string adicional para el título
     """
 
@@ -84,9 +91,13 @@ def plot_convergence_to_nash(policies: dict, nash_equilibrium: dict, title_suffi
     num_agents = len(agents)
 
     fig, axs = plt.subplots(1, num_agents, figsize=(6 * num_agents, 5), sharey=True)
-
     if num_agents == 1:
         axs = [axs]
+
+    # Definir la paleta de colores "tab20"
+    # Calculamos el máximo número de acciones entre todos los agentes
+    num_total_actions = max(policy.shape[1] for policy in policies.values())
+    colors = sns.color_palette("tab20", n_colors=num_total_actions)
 
     for idx, agent in enumerate(agents):
         policy_matrix = policies[agent]
@@ -98,13 +109,15 @@ def plot_convergence_to_nash(policies: dict, nash_equilibrium: dict, title_suffi
             ax.plot(
                 range(len(diffs)),
                 diffs[:, action],
-                label=f'Action {action}',
-                linewidth=2
+                label=f'Action {action + 1}',
+                linewidth=2,
+                color=colors[action % num_total_actions]
             )
         ax.set_title(f'Convergence for {agent} {title_suffix}')
         ax.set_xlabel("Iteration")
         if idx == 0:
             ax.set_ylabel("Abs. Error per Action")
+        ax.legend()
         ax.grid(True)
 
     plt.tight_layout()
