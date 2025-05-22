@@ -194,52 +194,74 @@ def plot_action_histogram(policies: dict, title_suffix=""):
 
 
 
-def plot_dual_agent_simplex(empirical_distributions: dict, title="Empirical distributions in dual simplex"):
-    import matplotlib.pyplot as plt
-    import numpy as np
-
+def plot_dual_agent_simplex(
+    empirical_distributions: dict,
+    action_labels: list = None,
+    action1_idx: int = 0,
+    action2_idx: int = 1,
+    title="Empirical distributions in dual simplex"
+):
     assert len(empirical_distributions) == 2, "Debe haber exactamente dos agentes."
+    assert len(action_labels) == 3, "action_labels debe contener los nombres de las 3 acciones (ej. ['Rock', 'Paper', 'Scissors'])."
+    assert 0 <= action1_idx < 3 and 0 <= action2_idx < 3 and action1_idx != action2_idx, \
+        "Los índices de acción deben ser 0, 1 o 2 y diferentes entre sí."
 
     agent_names = list(empirical_distributions.keys())
     colors = ['steelblue', 'darkorange']
     n_points = len(next(iter(empirical_distributions.values())))
 
+    # Determine the third action index
+    all_indices = {0, 1, 2}
+    remaining_idx = list(all_indices - {action1_idx, action2_idx})[0]
+
     plt.figure(figsize=(7, 7))
 
-    # Diagonal compartida (π₃ = 0)
-    plt.plot([0, 1], [1, 0], 'k--', linewidth=1.2, label="π₃ = 0")
+    # Diagonal compartida (π₃ = 0, where π₃ is the probability of the *remaining* action)
+    plt.plot([0, 1], [1, 0], 'k--', linewidth=1.2, label=f"$\pi_3$ ({action_labels[remaining_idx]}) = 0")
 
     for i, agent in enumerate(agent_names):
         traj = np.array(empirical_distributions[agent])
-        rock = traj[:, 0]
-        paper = traj[:, 1]
-        scissors = 1 - rock - paper
 
-        valid = (rock >= 0) & (paper >= 0) & (scissors >= 0)
-        rock, paper = rock[valid], paper[valid]
+        # Extract the probabilities for the chosen actions
+        prob_action1 = traj[:, action1_idx]
+        prob_action2 = traj[:, action2_idx]
+        prob_remaining = 1 - prob_action1 - prob_action2
 
-        # Reflejar agente 2 sobre la diagonal
+        valid = (prob_action1 >= 0) & (prob_action2 >= 0) & (prob_remaining >= 0)
+        prob_action1, prob_action2 = prob_action1[valid], prob_action2[valid]
+
         if i == 1:
-            rock, paper = 1 - paper, 1 - rock
+            plot_x = 1 - prob_action2
+            plot_y = 1 - prob_action1
+        else:
+            plot_x = prob_action1
+            plot_y = prob_action2
 
-        # Gradiente de alpha
-        alphas = np.linspace(0.2, 1.0, len(rock))
-        for j in range(1, len(rock)):
+        # Gradient of alpha
+        alphas = np.linspace(0.2, 1.0, len(plot_x))
+        for j in range(1, len(plot_x)):
             plt.plot(
-                [rock[j - 1], rock[j]], [paper[j - 1], paper[j]],
+                [plot_x[j - 1], plot_x[j]], [plot_y[j - 1], plot_y[j]],
                 color=colors[i], alpha=alphas[j], lw=2
             )
 
-        # Puntos discretos cada 10 pasos
-        plt.scatter(rock[::10], paper[::10], color=colors[i], s=15, alpha=0.6, label=f"{agent}")
+        # Discrete points every 10 steps
+        plt.scatter(plot_x[::10], plot_y[::10], color=colors[i], s=15, alpha=0.6, label=f"{agent}")
 
-        # Equilibrio Nash
-        x_eq, y_eq = (1/3, 1/3)
+        # Nash Equilibrium (1/3, 1/3, 1/3) for Rock-Paper-Scissors
+        x_eq_nash = 1/3
+        y_eq_nash = 1/3
+
         if i == 1:
-            x_eq, y_eq = 1 - y_eq, 1 - x_eq
-        plt.plot(x_eq, y_eq, 'k*', markersize=14)
+            plot_x_eq = 1 - y_eq_nash
+            plot_y_eq = 1 - x_eq_nash
+        else:
+            plot_x_eq = x_eq_nash
+            plot_y_eq = y_eq_nash
+        plt.plot(plot_x_eq, plot_y_eq, 'k*', markersize=14)
 
-    # Ejes y estilo
+
+    # Axes and style
     plt.xlim(0, 1)
     plt.ylim(0, 1)
     ticks = np.linspace(0, 1, 6)
@@ -248,20 +270,20 @@ def plot_dual_agent_simplex(empirical_distributions: dict, title="Empirical dist
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.gca().set_aspect('equal', adjustable='box')
 
-    # Ejes primarios (agente 1)
-    plt.xlabel(r"$\pi_1(\mathrm{Rock})$", loc='center')
-    plt.ylabel(r"$\pi_1(\mathrm{Paper})$", loc='center')
+    # Primary axes (agent 1) - CORRECCIÓN APLICADA AQUÍ
+    plt.xlabel(r"$\pi_1(\mathrm{" + action_labels[action1_idx] + "})$", loc='center')
+    plt.ylabel(r"$\pi_1(\mathrm{" + action_labels[action2_idx] + "})$", loc='center')
 
-    # Ejes secundarios (agente 2)
+    # Secondary axes (agent 2) - CORRECCIÓN APLICADA AQUÍ
     ax2 = plt.gca().secondary_xaxis('top', functions=(lambda x: 1 - x, lambda x: 1 - x))
     ax2.set_xticks(ticks)
-    ax2.set_xlabel(r"$\pi_2(\mathrm{Rock})$", loc='center')
+    ax2.set_xlabel(r"$\pi_2(\mathrm{" + action_labels[action1_idx] + "})$", loc='center')
 
     ax3 = plt.gca().secondary_yaxis('right', functions=(lambda y: 1 - y, lambda y: 1 - y))
     ax3.set_yticks(ticks)
-    ax3.set_ylabel(r"$\pi_2(\mathrm{Paper})$", loc='center')
+    ax3.set_ylabel(r"$\pi_2(\mathrm{" + action_labels[action2_idx] + "})$", loc='center')
 
-    # Leyenda y título
+    # Legend and title
     plt.title(title)
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08), ncol=3, frameon=False)
     plt.tight_layout()
