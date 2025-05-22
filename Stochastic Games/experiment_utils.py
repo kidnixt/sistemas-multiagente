@@ -134,7 +134,7 @@ def get_epsilon_func(min_value=0.05, max_value=1.0, decay_steps=8000):
 
 # Alpha is just 0.1 for all steps
 def alpha_func(i: int, value=0.1):
-        return 0.1
+        return value
 
 def get_alpha_func(value =0.1):
     """
@@ -156,6 +156,7 @@ def single_run_iql(game, i, config):
                              gamma=config["agent"]["gamma"], seed=i)
                     for agent in game.agents
                 }
+    print(len(agents))
     rewards = train(game, agents, config["train"]["iterations"], config["train"]["episodes_per_iteration"], verbose=False)
     rewards_matrix = np.array([rewards[agent] for agent in game.agents])
     return rewards_matrix
