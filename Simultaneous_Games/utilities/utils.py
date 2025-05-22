@@ -194,6 +194,9 @@ def plot_action_histogram(policies: dict, title_suffix=""):
 
 
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 def plot_dual_agent_simplex(
     empirical_distributions: dict,
     action_labels: list = None,
@@ -208,7 +211,7 @@ def plot_dual_agent_simplex(
 
     agent_names = list(empirical_distributions.keys())
     colors = ['steelblue', 'darkorange']
-    n_points = len(next(iter(empirical_distributions.values())))
+    # n_points = len(next(iter(empirical_distributions.values()))) # Esta variable no se usa, se puede quitar.
 
     # Determine the third action index
     all_indices = {0, 1, 2}
@@ -217,7 +220,8 @@ def plot_dual_agent_simplex(
     plt.figure(figsize=(7, 7))
 
     # Diagonal compartida (π₃ = 0, where π₃ is the probability of the *remaining* action)
-    plt.plot([0, 1], [1, 0], 'k--', linewidth=1.2, label=f"$\pi_3$ ({action_labels[remaining_idx]}) = 0")
+    # MODIFICACIÓN: Eliminamos el argumento 'label' para que no aparezca en la leyenda
+    plt.plot([0, 1], [1, 0], 'k--', linewidth=1.2) # ANTES: label=f"$\pi_3$ ({action_labels[remaining_idx]}) = 0"
 
     for i, agent in enumerate(agent_names):
         traj = np.array(empirical_distributions[agent])
@@ -258,8 +262,7 @@ def plot_dual_agent_simplex(
         else:
             plot_x_eq = x_eq_nash
             plot_y_eq = y_eq_nash
-        plt.plot(plot_x_eq, plot_y_eq, 'k*', markersize=14)
-
+        plt.plot(plot_x_eq, plot_y_eq, 'k*', markersize=14) # No label para este, así que no aparece en leyenda
 
     # Axes and style
     plt.xlim(0, 1)
@@ -270,11 +273,11 @@ def plot_dual_agent_simplex(
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.gca().set_aspect('equal', adjustable='box')
 
-    # Primary axes (agent 1) - CORRECCIÓN APLICADA AQUÍ
+    # Primary axes (agent 1)
     plt.xlabel(r"$\pi_1(\mathrm{" + action_labels[action1_idx] + "})$", loc='center')
     plt.ylabel(r"$\pi_1(\mathrm{" + action_labels[action2_idx] + "})$", loc='center')
 
-    # Secondary axes (agent 2) - CORRECCIÓN APLICADA AQUÍ
+    # Secondary axes (agent 2)
     ax2 = plt.gca().secondary_xaxis('top', functions=(lambda x: 1 - x, lambda x: 1 - x))
     ax2.set_xticks(ticks)
     ax2.set_xlabel(r"$\pi_2(\mathrm{" + action_labels[action1_idx] + "})$", loc='center')
@@ -288,7 +291,6 @@ def plot_dual_agent_simplex(
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08), ncol=3, frameon=False)
     plt.tight_layout()
     plt.show()
-
 
 
 
