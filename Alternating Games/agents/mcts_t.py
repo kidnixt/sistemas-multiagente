@@ -2,7 +2,8 @@ from base.game import AlternatingGame, AgentID, ActionType
 from base.agent import Agent
 from math import log, sqrt
 import numpy as np
-from typing import Callable
+from typing import Callable, Optional
+import sys
 
 class MCTSNode:
     def __init__(self, parent: 'MCTSNode', game: AlternatingGame, action: ActionType):
@@ -28,7 +29,8 @@ def uct(node: MCTSNode, agent: AgentID) -> MCTSNode:
     return child
 
 class MonteCarloTreeSearch(Agent):
-    def __init__(self, game: AlternatingGame, agent: AgentID, simulations: int=100, rollouts: int=10, selection: Callable[[MCTSNode, AgentID], MCTSNode]=uct) -> None:
+    def __init__(self, game: AlternatingGame, agent: AgentID, simulations: int=100, rollouts: int=10,
+                 depth: Optional[int]=None, selection: Callable[[MCTSNode, AgentID], MCTSNode]=uct) -> None:
         """
         Parameters:
             game: alternating game associated with the agent
@@ -41,6 +43,7 @@ class MonteCarloTreeSearch(Agent):
         self.simulations = simulations
         self.rollouts = rollouts
         self.selection = selection
+        self.depth = depth
         
     def action(self) -> ActionType:
         a, _ = self.mcts()
@@ -88,12 +91,24 @@ class MonteCarloTreeSearch(Agent):
             rollout_game = node.game.clone()
             
             # Play randomly until the game terminates
-            while not rollout_game.terminated():
+            depth = self.depth if self.depth is not None else sys.maxsize
+            while not rollout_game.terminated() and depth > 0:
+                depth -= 1
                 actions = rollout_game.available_actions()
                 # Choose a random action
                 random_action = np.random.choice(actions)
                 rollout_game.step(random_action)
             
+            if rollout_game.terminated():
+                # If the game ended, get rewards for all agents
+                for i, agent in enumerate(self.game.agents):
+                    rewards[i] += rollout_game.reward(agent)
+            
+            if depth == 0:
+                for i, agent in enumerate(self.game.agents):
+                    rewards[i] += rollout_game.eval(agent)
+
+
            # Get the final rewards and accumulate them
             for i, agent in enumerate(self.game.agents):
                 rewards[i] += rollout_game.reward(agent)
