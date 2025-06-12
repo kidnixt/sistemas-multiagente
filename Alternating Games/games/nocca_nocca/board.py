@@ -139,7 +139,11 @@ class Board:
             y == 4 and move in ["E", "NE", "SE"]
         ):
             return (False, "Cannot move out of bounds")
-        # missing check for destination tower height
+        # check for destination tower height
+        new_x, new_y = Board._map_action_to_new_pos(action)
+        if self.squares[new_x][new_y][2] != EMPTY:
+            return (False, "Cannot move to a full tower")
+        # if all checks passed, the move is legal
         return (True, "Legal move")
 
     def set_board(self, board: Self) -> None:

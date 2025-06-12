@@ -66,10 +66,21 @@ class TicTacToe(AlternatingGame):
             print()
         print()
 
+    # def clone(self):
+    #     self_clone = super().clone()
+    #     self_clone.env.board.squares = self.env.board.squares.copy()
+    #     self_clone.env.agent_selection = self.env.agent_selection
+    #     return self_clone
+
     def clone(self):
-        self_clone = super().clone()
+        self_clone = TicTacToe(render_mode=self.env.render_mode)
         self_clone.env.board.squares = self.env.board.squares.copy()
+        self_clone.env.rewards = self.env.rewards.copy()
+        self_clone.env.terminations = self.env.terminations.copy()
+        self_clone.env.truncations = self.env.truncations.copy()
+        self_clone.env.infos = self_clone.env.infos.copy
         self_clone.env.agent_selection = self.env.agent_selection
+        self_clone._update()
         return self_clone
 
     def eval(self, agent: AgentID) -> float:

@@ -50,24 +50,17 @@ class MonteCarloTreeSearch(Agent):
         return a
 
     def mcts(self) -> tuple[ActionType, float]:
-
         root = MCTSNode(parent=None, game=self.game.clone(), action=None)
 
         for i in range(self.simulations):
             node = root
-            #node.game = self.game.clone()
 
             node = self.select_node(node=node)
             new_node = self.expand_node(node)
-
             rewards = self.rollout(new_node)
             self.backprop(new_node, rewards)
 
-        #for child in root.children:
-        #    print(child.action, child.cum_rewards / child.visits)
-
         action, value = self.action_selection(root)
-
         return action, value
 
     def backprop(self, node, rewards):
@@ -85,7 +78,6 @@ class MonteCarloTreeSearch(Agent):
     def rollout(self, node):
         rewards = np.zeros(len(self.game.agents))
         
-        # Perform multiple rollouts and average the results
         for _ in range(self.rollouts):
             # Clone the game state from the node
             rollout_game = node.game.clone()
@@ -100,14 +92,12 @@ class MonteCarloTreeSearch(Agent):
                 rollout_game.step(random_action)
             
             if rollout_game.terminated():
-                # If the game ended, get rewards for all agents
                 for i, agent in enumerate(self.game.agents):
                     rewards[i] += rollout_game.reward(agent)
             
             if depth == 0:
                 for i, agent in enumerate(self.game.agents):
                     rewards[i] += rollout_game.eval(agent)
-
 
            # Get the final rewards and accumulate them
             for i, agent in enumerate(self.game.agents):
@@ -116,6 +106,26 @@ class MonteCarloTreeSearch(Agent):
         # Return average rewards across all rollouts
         return rewards / self.rollouts
     
+    # def select_node(self, node: MCTSNode) -> MCTSNode:
+    #     curr_node = node
+    #     while not curr_node.game.terminated():
+    #         actions = curr_node.game.available_actions()
+            
+    #         # If node has unexplored actions, return it
+    #         if len(curr_node.children) < len(actions):
+    #             return curr_node
+            
+    #         # All actions have been expanded - select among existing children
+    #         if curr_node.explored_children < len(curr_node.children):
+    #             # Select next unvisited child
+    #             curr_node = curr_node.children[curr_node.explored_children]
+    #             curr_node.explored_children += 1
+    #         else:
+    #             # All children visited - use selection policy (UCT)
+    #             curr_node = self.selection(curr_node, self.agent)
+     
+    #     return curr_node
+
     def select_node(self, node: MCTSNode) -> MCTSNode:
         curr_node = node
         while not curr_node.game.terminated():
@@ -125,30 +135,10 @@ class MonteCarloTreeSearch(Agent):
             if len(curr_node.children) < len(actions):
                 return curr_node
             
-            # All actions have been expanded - select among existing children
-            if curr_node.explored_children < len(curr_node.children):
-                # Select next unvisited child
-                curr_node = curr_node.children[curr_node.explored_children]
-                curr_node.explored_children += 1
-            else:
-                # All children visited - use selection policy (UCT)
-                curr_node = self.selection(curr_node, self.agent)
-        
+            # Use UCT selection directly for all children
+            curr_node = self.selection(curr_node, self.agent)
+    
         return curr_node
-
-    # !Esta version de select_node solo funciona si expand_node crea TODOS los hijos de cada nodo que expandimos
-    # lo cual no es lo más eficiente. 
-    # def select_node(self, node: MCTSNode) -> MCTSNode:
-    #     curr_node = node
-    #     while curr_node.children:
-    #         if curr_node.explored_children < len(curr_node.children):
-    #             # Select next unvisited child
-    #             curr_node = curr_node.children[curr_node.explored_children]
-    #             curr_node.explored_children += 1
-    #         else:
-    #             # All children visited - use selection policy (UCT)
-    #             curr_node = self.selection(curr_node, self.agent)
-    #     return curr_node
 
     def expand_node(self, node) -> MCTSNode:
         if node.game.terminated():
