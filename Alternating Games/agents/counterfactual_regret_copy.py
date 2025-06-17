@@ -9,15 +9,33 @@ import pandas as pd
 
 class InfoSet:
     def __init__(self, num_actions: int):
-        self.regrets = self.regrets = np.random.normal(0, 1e-6, num_actions) # Regret values initialized with small noise
+        self.regrets = np.random.normal(0, 1e-6, num_actions)
         self.strategy_sum = np.zeros(num_actions)
         self.current_strategy = np.ones(num_actions) / num_actions
+        self.regret_floor = -300
+        self.t = 0  # Time step counter for discounting
+        
+    def update_regrets_and_strategy(self, regret_updates: np.ndarray, strategy: np.ndarray, reach_prob: float):
+        """Update regrets and strategy sum with optional discounting"""
+        self.t += 1
+        
+        # Update regrets with floor
+        self.regrets += regret_updates
+        self.regrets = np.maximum(self.regrets, self.regret_floor)
+        
+        # Use linear averaging for strategy sum (prevents explosion)
+        discount_factor = self.t / (self.t + 1) if self.t > 1000 else 1.0
+        self.strategy_sum = self.strategy_sum * discount_factor + strategy * reach_prob
         
     def get_strategy(self) -> np.ndarray:
-        """Get current strategy using regret matching"""
-        regret_sum = np.sum(np.maximum(self.regrets, 0))
-        if regret_sum > 1e-15:  # Use small epsilon instead of 0
-            self.current_strategy = np.maximum(self.regrets, 0) / regret_sum
+        """Get current strategy using regret matching with floor"""
+        # Apply regret floor to prevent extreme negative values
+        clamped_regrets = np.maximum(self.regrets, self.regret_floor)
+        positive_regrets = np.maximum(clamped_regrets, 0)
+        
+        regret_sum = np.sum(positive_regrets)
+        if regret_sum > 1e-15:
+            self.current_strategy = positive_regrets / regret_sum
         else:
             self.current_strategy = np.ones(len(self.regrets)) / len(self.regrets)
         return self.current_strategy
@@ -31,15 +49,17 @@ class InfoSet:
             return np.ones(len(self.strategy_sum)) / len(self.strategy_sum)
 
 class CounterFactualRegret(Agent):
-    def __init__(self, game: AlternatingGame, agent: AgentID, seed: Optional[int] = None, track_frequency: int = 1):
+    def __init__(self, game: AlternatingGame, agent: AgentID, seed: Optional[int] = None, 
+                 track_frequency: int = 1, exploration_bonus: float = 0.01):
         super().__init__(game, agent)
         self.info_sets: Dict[str, InfoSet] = {}
-        self.node_dict = {}  # For compatibility with notebook expectations
+        self.node_dict = {}
+        self.exploration_bonus = exploration_bonus
         
         # Strategy tracking for plotting
         self.strategy_history = defaultdict(list)
         self.iteration_history = []
-        self.track_frequency = track_frequency  # Track every N iterations
+        self.track_frequency = track_frequency
         
         if seed is not None:
             np.random.seed(seed)
@@ -61,54 +81,40 @@ class CounterFactualRegret(Agent):
     
     def cfr(self, game_state: AlternatingGame, player: AgentID, reach_prob: Dict[AgentID, float], 
             chance_reach: float = 1.0, update_player: Optional[AgentID] = None) -> float:
-        """
-        Counterfactual Regret Minimization algorithm
+        """CFR with exploration bonus and numerical stability"""
         
-        Args:
-            game_state: Current game state
-            player: Current player
-            reach_prob: Reach probabilities for each player
-            chance_reach: Reach probability from chance events
-            update_player: Player whose regrets we're updating (None means update current player)
-        """
-        
-        # Terminal node
         if game_state.terminated():
             reward = game_state.reward(update_player)
-            #print(f"Terminal reward for {update_player}: {reward}")
             return reward if reward is not None else 0.0
         
-        # Get current player
         current_player = game_state.agent_selection
         if update_player is None:
             update_player = current_player
             
-        # Get available actions
         actions = game_state.available_actions()
-        #print(f"Available actions: {actions}")
         num_actions = len(actions)
         
-        # Get information set
         info_set_key = self.get_info_set_key(game_state)
         info_set = self.get_or_create_info_set(info_set_key, num_actions)
         
-        # Get current strategy
-        strategy = info_set.get_strategy()
+        # Get current strategy with exploration bonus
+        base_strategy = info_set.get_strategy()
+        strategy = (1 - self.exploration_bonus) * base_strategy + \
+                  (self.exploration_bonus / num_actions)
         
-        # Compute utilities for each action
+        # Normalize to ensure it's a valid probability distribution
+        strategy = strategy / np.sum(strategy)
+        
         action_utilities = np.zeros(num_actions)
         node_utility = 0.0
         
         for i, action in enumerate(actions):
-            # Create new game state
             new_game_state = game_state.clone()
             new_game_state.step(action)
             
-            # Update reach probabilities
             new_reach_prob = reach_prob.copy()
             new_reach_prob[current_player] *= strategy[i]
             
-            # Recursive call
             action_utilities[i] = self.cfr(
                 new_game_state, 
                 new_game_state.agent_selection if not new_game_state.terminated() else current_player,
@@ -121,21 +127,25 @@ class CounterFactualRegret(Agent):
         
         # Update regrets and strategy sum if this is the player we're updating
         if current_player == update_player:
-            # Calculate counterfactual reach (reach probability of other players)
             cfr_reach = chance_reach
             for p, prob in reach_prob.items():
                 if p != current_player:
                     cfr_reach *= prob
             
-            # Update regrets
+            # Calculate regret updates
+            regret_updates = np.zeros(num_actions)
             for i in range(num_actions):
-                regret = action_utilities[i] - node_utility
-                info_set.regrets[i] += cfr_reach * regret
+                regret_updates[i] = cfr_reach * (action_utilities[i] - node_utility)
             
-            # Update strategy sum
+            # Update using the info set's method
             my_reach = reach_prob.get(current_player, 1.0)
-            for i in range(num_actions):
-                info_set.strategy_sum[i] += my_reach * strategy[i]
+            if hasattr(info_set, 'update_regrets_and_strategy'):
+                info_set.update_regrets_and_strategy(regret_updates, base_strategy, my_reach)
+            else:
+                # Fallback to original method with clamping
+                info_set.regrets += regret_updates
+                info_set.regrets = np.maximum(info_set.regrets, -300)  # Regret floor
+                info_set.strategy_sum += my_reach * base_strategy
         
         return node_utility
     
