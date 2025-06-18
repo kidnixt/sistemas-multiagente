@@ -1,220 +1,135 @@
+import numpy as np
 from base.agent import Agent, AgentID
 from base.game import AlternatingGame
-import numpy as np
 from collections import defaultdict
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 import copy
 import matplotlib.pyplot as plt
 import pandas as pd
 
-class InfoSet:
+class InfoSetSampling:
     def __init__(self, num_actions: int):
-        self.regrets = np.zeros(num_actions) 
+        self.regrets = np.zeros(num_actions)
         self.strategy_sum = np.zeros(num_actions)
         self.current_strategy = np.ones(num_actions) / num_actions
-        
-    def get_strategy(self) -> np.ndarray:
-        """Get current strategy using regret matching"""
-        regret_sum = np.sum(np.maximum(self.regrets, 0))
-        if regret_sum > 0:  # Use small epsilon instead of 0
-            self.current_strategy = np.maximum(self.regrets, 0) / regret_sum
-        else:
-            self.current_strategy = np.ones(len(self.regrets)) / len(self.regrets)
-        return self.current_strategy
-    
-    def get_average_strategy(self) -> np.ndarray:
-        """Get average strategy over all iterations"""
-        norm_sum = np.sum(self.strategy_sum)
-        if norm_sum > 0:  # Use small epsilon instead of 0
-            return self.strategy_sum / norm_sum
-        else:
-            return np.ones(len(self.strategy_sum)) / len(self.strategy_sum)
 
-class CounterFactualRegret(Agent):
-    def __init__(self, game: AlternatingGame, agent: AgentID, seed: Optional[int] = None, track_frequency: int = 1):
+    def get_strategy(self) -> np.ndarray:
+        pos_regrets = np.maximum(self.regrets, 0)
+        smoothed_regrets = pos_regrets + 1e-3
+        regret_sum = smoothed_regrets.sum()
+        if regret_sum > 1e-15:
+            self.current_strategy = smoothed_regrets / regret_sum
+        else:
+            self.current_strategy = np.ones_like(self.regrets) / len(self.regrets)
+        return self.current_strategy
+
+    def get_average_strategy(self) -> np.ndarray:
+        total = self.strategy_sum.sum()
+        if total > 1e-15:
+            return self.strategy_sum / total
+        else:
+            return np.ones_like(self.strategy_sum) / len(self.strategy_sum)
+
+    def update_regrets(self, regret_update: np.ndarray):
+        self.regrets += regret_update
+
+    def update_strategy_sum(self, strategy: np.ndarray, weight: float = 1.0):
+        self.strategy_sum += weight * strategy
+
+
+class CounterFactualRegretSampling(Agent):
+    def __init__(self, game: AlternatingGame, agent: AgentID, seed: Optional[int] = None, track_frequency: int = 100) -> None:
         super().__init__(game, agent)
-        self.info_sets: Dict[str, InfoSet] = {}
-        self.node_dict = {}  # For compatibility with notebook expectations
-        
+        self.info_sets: Dict[str, InfoSetSampling] = {}
+        self.node_dict = {}
+        if seed is not None:
+            np.random.seed(seed)
+
         # Strategy tracking for plotting
         self.strategy_history = defaultdict(list)
         self.iteration_history = []
-        self.track_frequency = track_frequency  # Track every N iterations
-        
-        if seed is not None:
-            np.random.seed(seed)
-            
+        self.track_frequency = track_frequency
+
     def get_info_set_key(self, game_state: AlternatingGame) -> str:
-        """Create a unique key for the information set based on game state"""
         obs = game_state.observe(game_state.agent_selection)
-        if isinstance(obs, dict):
-            return str(sorted(obs.items()))
-        return str(obs)
-    
-    def get_or_create_info_set(self, key: str, num_actions: int) -> InfoSet:
-        """Get existing info set or create new one"""
+        return str(sorted(obs.items())) if isinstance(obs, dict) else str(obs)
+
+    def get_or_create_info_set(self, key: str, num_actions: int) -> InfoSetSampling:
         if key not in self.info_sets:
-            self.info_sets[key] = InfoSet(num_actions)
+            self.info_sets[key] = InfoSetSampling(num_actions)
         return self.info_sets[key]
-    
-    def cfr(self, game_state: AlternatingGame, player: AgentID, reach_prob: Dict[AgentID, float], 
-            update_player: AgentID, chance_reach: float = 1.0) -> float:
-        """
-        Counterfactual Regret Minimization algorithm
-        
-        Args:
-            game_state: Current game state
-            player: Current player
-            reach_prob: Reach probabilities for each player
-            chance_reach: Reach probability from chance events
-            update_player: Player whose regrets we're updating
-        """
-        
-        # Terminal node
+
+    def external_sampling_cfr(self, game_state: AlternatingGame, player: AgentID,
+                               pi: float, sigma: float) -> float:
         if game_state.terminated():
-            reward = game_state.reward(update_player)
-            #print(f"Terminal reward for {update_player}: {reward}")
-            return reward
-        
-        # Get current player
+            reward = game_state.reward(player)
+            return reward if reward is not None else 0.0
+
         current_player = game_state.agent_selection
-        # if update_player is None:
-        #     update_player = current_player
-            
-        # Get available actions
         actions = game_state.available_actions()
-        #print(f"Available actions: {actions}")
         num_actions = len(actions)
-        
-        # Get information set
+
         info_set_key = self.get_info_set_key(game_state)
         info_set = self.get_or_create_info_set(info_set_key, num_actions)
-        
-        # Get current strategy
         strategy = info_set.get_strategy()
-        
-        # Compute utilities for each action
-        action_utilities = np.zeros(num_actions)
-        node_utility = 0.0
-        
-        for i, action in enumerate(actions):
-            # Create new game state
-            new_game_state = game_state.clone()
-            new_game_state.step(action)
-            
-            # Update reach probabilities
-            new_reach_prob = reach_prob.copy()
-            new_reach_prob[current_player] *= strategy[i]
-            
-            # Recursive call
-            action_utilities[i] = self.cfr(
-                new_game_state, 
-                #new_game_state.agent_selection if not new_game_state.terminated() else current_player,
-                new_game_state.agent_selection,
-                new_reach_prob, 
-                update_player,
-            )
-            
-            node_utility += strategy[i] * action_utilities[i]
-        
-        # Update regrets and strategy sum if this is the player we're updating
-        if current_player == update_player:
-            # Calculate counterfactual reach (reach probability of other players)
-            cfr_reach = 1.0
-            for p, prob in reach_prob.items():
-                if p != current_player:
-                    cfr_reach *= prob
-            cfr_reach *= chance_reach
-            
-            # Update regrets
-            for i in range(num_actions):
-                regret = action_utilities[i] - node_utility
-                info_set.regrets[i] += cfr_reach * regret
-            
-            # Update strategy sum
-            my_reach = reach_prob.get(current_player, 1.0)
-            for i in range(num_actions):
-                info_set.strategy_sum[i] += my_reach * strategy[i]
-        
-        return node_utility
-    
-    def train(self, iterations: int = 10000, track_strategies: bool = True) -> None:
-        """Train the agent using CFR with optional strategy tracking"""            
-        for i in range(iterations):
-            # Train for each player
-            for player in self.game.agents:
-                # Ensure clean game state
-                self.game.reset()
-                
-                # Verify game is in initial state
-                if not hasattr(self.game, 'agent_selection') or self.game.agent_selection is None:
-                    continue
-                    
-                reach_prob = {p: 1.0 for p in self.game.agents}
-                
-                self.cfr(self.game, self.game.agent_selection, reach_prob, player, 1.0)
 
-                # try:
-                #     self.cfr(self.game, self.game.agent_selection, reach_prob, 1.0, player)
-                # except Exception as e:
-                #     print(f"Error during CFR iteration {i} for player {player}: {e}")
-                #     continue
-            
-            # Track strategies at specified intervals
+        if current_player == player:
+            # Traverse all actions for own player
+            util = np.zeros(num_actions)
+            node_utility = 0.0
+            for i, action in enumerate(actions):
+                new_state = copy.deepcopy(game_state)
+                new_state.step(action)
+                util[i] = self.external_sampling_cfr(new_state, player, pi * strategy[i], sigma)
+                node_utility += strategy[i] * util[i]
+
+            regrets = (util - node_utility) * sigma
+            info_set.update_regrets(regrets)
+            info_set.update_strategy_sum(strategy, pi)
+            return node_utility
+        else:
+            # Sample one action from opponent's strategy
+            action_idx = np.random.choice(len(actions), p=strategy)
+            sampled_action = actions[action_idx]
+            new_state = copy.deepcopy(game_state)
+            new_state.step(sampled_action)
+            return self.external_sampling_cfr(new_state, player, pi, sigma * strategy[action_idx])
+
+    def train(self, iterations: int = 10000, verbose: bool = False, track_strategies: bool = True) -> None:
+        for i in range(iterations):
+            for player in self.game.agents:
+                self.game.reset()
+                self.external_sampling_cfr(self.game, player, pi=1.0, sigma=1.0)
+
+                if verbose and i % 1000 == 0:
+                    print(f"Iteration {i}, Player {player}")
+
             if track_strategies and i % self.track_frequency == 0:
                 self._track_current_strategies(i)
-        
-        # Create node_dict for compatibility with existing notebooks
+
         self._create_node_dict()
-    
+
     def _create_node_dict(self) -> None:
-        """Create node_dict for compatibility with existing code"""
         self.node_dict = {}
         for key, info_set in self.info_sets.items():
-            # Create a simple wrapper that has a policy() method
             class PolicyWrapper:
                 def __init__(self, info_set):
                     self.info_set = info_set
-                
                 def policy(self):
                     return self.info_set.get_average_strategy()
-            
             self.node_dict[key] = PolicyWrapper(info_set)
-    
+
     def action(self) -> int:
-        """Choose action based on current strategy"""
-        info_set_key = self.get_info_set_key(self.game)
-        
-        if info_set_key in self.info_sets:
-            actions = self.game.available_actions()
-            strategy = self.info_sets[info_set_key].get_average_strategy()
-            
-            # Handle case where strategy length doesn't match actions
-            if len(strategy) != len(actions):
-                return np.random.choice(actions)
-            
-            # Sample action according to strategy
+        key = self.get_info_set_key(self.game)
+        actions = self.game.available_actions()
+        if key in self.info_sets:
+            strategy = self.info_sets[key].get_average_strategy()
             return np.random.choice(actions, p=strategy)
-        else:
-            # Random action if no strategy learned yet
-            return np.random.choice(self.game.available_actions())
-    
+        return np.random.choice(actions)
+
     def policy(self) -> Dict[str, np.ndarray]:
-        """Return the learned policies for all information sets"""
-        policies = {}
-        for key, info_set in self.info_sets.items():
-            policies[key] = info_set.get_average_strategy()
-        return policies
+        return {k: v.get_average_strategy() for k, v in self.info_sets.items()}
     
-    def get_strategy(self, info_set_key: str) -> np.ndarray:
-        """Get strategy for a specific information set"""
-        if info_set_key in self.info_sets:
-            return self.info_sets[info_set_key].get_average_strategy()
-        else:
-            # Return uniform random if info set not found
-            actions = self.game.available_actions()
-            return np.ones(len(actions)) / len(actions)
-        
     def _track_current_strategies(self, iteration: int) -> None:
         """Track current average strategies for plotting"""
         self.iteration_history.append(iteration)
@@ -225,7 +140,6 @@ class CounterFactualRegret(Agent):
         for key in current_info_sets:
             info_set = self.info_sets[key]
             avg_strategy = info_set.get_average_strategy()
-            # avg_strategy = info_set.get_strategy()
             
             # Store each action probability
             for action_idx, prob in enumerate(avg_strategy):
