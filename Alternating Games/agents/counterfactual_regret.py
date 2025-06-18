@@ -9,14 +9,14 @@ import pandas as pd
 
 class InfoSet:
     def __init__(self, num_actions: int):
-        self.regrets = self.regrets = np.random.normal(0, 1e-6, num_actions) # Regret values initialized with small noise
+        self.regrets = np.zeros(num_actions) 
         self.strategy_sum = np.zeros(num_actions)
         self.current_strategy = np.ones(num_actions) / num_actions
         
     def get_strategy(self) -> np.ndarray:
         """Get current strategy using regret matching"""
         regret_sum = np.sum(np.maximum(self.regrets, 0))
-        if regret_sum > 1e-15:  # Use small epsilon instead of 0
+        if regret_sum > 0:  # Use small epsilon instead of 0
             self.current_strategy = np.maximum(self.regrets, 0) / regret_sum
         else:
             self.current_strategy = np.ones(len(self.regrets)) / len(self.regrets)
@@ -25,7 +25,7 @@ class InfoSet:
     def get_average_strategy(self) -> np.ndarray:
         """Get average strategy over all iterations"""
         norm_sum = np.sum(self.strategy_sum)
-        if norm_sum > 1e-15:  # Use small epsilon instead of 0
+        if norm_sum > 0:  # Use small epsilon instead of 0
             return self.strategy_sum / norm_sum
         else:
             return np.ones(len(self.strategy_sum)) / len(self.strategy_sum)
@@ -46,8 +46,6 @@ class CounterFactualRegret(Agent):
             
     def get_info_set_key(self, game_state: AlternatingGame) -> str:
         """Create a unique key for the information set based on game state"""
-        # This is game-specific and should be adapted based on your game
-        # For now, using a simple observation-based key
         obs = game_state.observe(game_state.agent_selection)
         if isinstance(obs, dict):
             return str(sorted(obs.items()))
@@ -60,7 +58,7 @@ class CounterFactualRegret(Agent):
         return self.info_sets[key]
     
     def cfr(self, game_state: AlternatingGame, player: AgentID, reach_prob: Dict[AgentID, float], 
-            chance_reach: float = 1.0, update_player: Optional[AgentID] = None) -> float:
+            update_player: AgentID, chance_reach: float = 1.0) -> float:
         """
         Counterfactual Regret Minimization algorithm
         
@@ -69,19 +67,19 @@ class CounterFactualRegret(Agent):
             player: Current player
             reach_prob: Reach probabilities for each player
             chance_reach: Reach probability from chance events
-            update_player: Player whose regrets we're updating (None means update current player)
+            update_player: Player whose regrets we're updating
         """
         
         # Terminal node
         if game_state.terminated():
             reward = game_state.reward(update_player)
             #print(f"Terminal reward for {update_player}: {reward}")
-            return reward if reward is not None else 0.0
+            return reward
         
         # Get current player
         current_player = game_state.agent_selection
-        if update_player is None:
-            update_player = current_player
+        # if update_player is None:
+        #     update_player = current_player
             
         # Get available actions
         actions = game_state.available_actions()
@@ -111,10 +109,10 @@ class CounterFactualRegret(Agent):
             # Recursive call
             action_utilities[i] = self.cfr(
                 new_game_state, 
-                new_game_state.agent_selection if not new_game_state.terminated() else current_player,
+                #new_game_state.agent_selection if not new_game_state.terminated() else current_player,
+                new_game_state.agent_selection,
                 new_reach_prob, 
-                chance_reach, 
-                update_player
+                update_player,
             )
             
             node_utility += strategy[i] * action_utilities[i]
@@ -122,10 +120,11 @@ class CounterFactualRegret(Agent):
         # Update regrets and strategy sum if this is the player we're updating
         if current_player == update_player:
             # Calculate counterfactual reach (reach probability of other players)
-            cfr_reach = chance_reach
+            cfr_reach = 1.0
             for p, prob in reach_prob.items():
                 if p != current_player:
                     cfr_reach *= prob
+            cfr_reach *= chance_reach
             
             # Update regrets
             for i in range(num_actions):
@@ -153,11 +152,13 @@ class CounterFactualRegret(Agent):
                     
                 reach_prob = {p: 1.0 for p in self.game.agents}
                 
-                try:
-                    self.cfr(self.game, self.game.agent_selection, reach_prob, 1.0, player)
-                except Exception as e:
-                    print(f"Error during CFR iteration {i} for player {player}: {e}")
-                    continue
+                self.cfr(self.game, self.game.agent_selection, reach_prob, player, 1.0)
+
+                # try:
+                #     self.cfr(self.game, self.game.agent_selection, reach_prob, 1.0, player)
+                # except Exception as e:
+                #     print(f"Error during CFR iteration {i} for player {player}: {e}")
+                #     continue
             
             # Track strategies at specified intervals
             if track_strategies and i % self.track_frequency == 0:
@@ -224,6 +225,7 @@ class CounterFactualRegret(Agent):
         for key in current_info_sets:
             info_set = self.info_sets[key]
             avg_strategy = info_set.get_average_strategy()
+            # avg_strategy = info_set.get_strategy()
             
             # Store each action probability
             for action_idx, prob in enumerate(avg_strategy):
