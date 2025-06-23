@@ -136,7 +136,17 @@ class NoccaNocca(AlternatingGame):
             return None
     
     def clone(self):
-        return super().clone()
+        #return super().clone()
+        self_clone = NoccaNocca(initial_player=self.initial_player, max_steps=self.max_steps, seed=self.seed, render_mode=self.render_mode)
+        self_clone.board = Board()
+        self_clone.board.set_board(self.board)
+        self_clone.rewards = self.rewards.copy()
+        self_clone.terminations = self.terminations.copy()
+        self_clone.truncations = self.truncations.copy()
+        self_clone.infos = self.infos.copy()
+        self_clone.agent_selection = self.agent_selection
+        self_clone.steps = self.steps
+        return self_clone
     
     def eval(self, agent: AgentID) -> float:
         if agent not in self.agents:
