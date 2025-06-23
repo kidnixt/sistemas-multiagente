@@ -16,7 +16,7 @@ class InfoSet:
     def get_strategy(self) -> np.ndarray:
         """Get current strategy using regret matching"""
         regret_sum = np.sum(np.maximum(self.regrets, 0))
-        if regret_sum > 0:  # Use small epsilon instead of 0
+        if regret_sum > 0:
             self.current_strategy = np.maximum(self.regrets, 0) / regret_sum
         else:
             self.current_strategy = np.ones(len(self.regrets)) / len(self.regrets)
@@ -25,7 +25,7 @@ class InfoSet:
     def get_average_strategy(self) -> np.ndarray:
         """Get average strategy over all iterations"""
         norm_sum = np.sum(self.strategy_sum)
-        if norm_sum > 0:  # Use small epsilon instead of 0
+        if norm_sum > 0:
             return self.strategy_sum / norm_sum
         else:
             return np.ones(len(self.strategy_sum)) / len(self.strategy_sum)
@@ -57,7 +57,7 @@ class CounterFactualRegret(Agent):
             self.info_sets[key] = InfoSet(num_actions)
         return self.info_sets[key]
     
-    def cfr(self, game_state: AlternatingGame, player: AgentID, reach_prob: Dict[AgentID, float], 
+    def cfr(self, game_state: AlternatingGame, reach_prob: Dict[AgentID, float], 
             update_player: AgentID, chance_reach: float = 1.0) -> float:
         """
         Counterfactual Regret Minimization algorithm
@@ -78,8 +78,6 @@ class CounterFactualRegret(Agent):
         
         # Get current player
         current_player = game_state.agent_selection
-        # if update_player is None:
-        #     update_player = current_player
             
         # Get available actions
         actions = game_state.available_actions()
@@ -109,8 +107,6 @@ class CounterFactualRegret(Agent):
             # Recursive call
             action_utilities[i] = self.cfr(
                 new_game_state, 
-                #new_game_state.agent_selection if not new_game_state.terminated() else current_player,
-                new_game_state.agent_selection,
                 new_reach_prob, 
                 update_player,
             )
@@ -141,24 +137,10 @@ class CounterFactualRegret(Agent):
     def train(self, iterations: int = 10000, track_strategies: bool = True) -> None:
         """Train the agent using CFR with optional strategy tracking"""            
         for i in range(iterations):
-            # Train for each player
             for player in self.game.agents:
-                # Ensure clean game state
-                self.game.reset()
-                
-                # Verify game is in initial state
-                if not hasattr(self.game, 'agent_selection') or self.game.agent_selection is None:
-                    continue
-                    
+                self.game.reset()                
                 reach_prob = {p: 1.0 for p in self.game.agents}
-                
-                self.cfr(self.game, self.game.agent_selection, reach_prob, player, 1.0)
-
-                # try:
-                #     self.cfr(self.game, self.game.agent_selection, reach_prob, 1.0, player)
-                # except Exception as e:
-                #     print(f"Error during CFR iteration {i} for player {player}: {e}")
-                #     continue
+                self.cfr(self.game, reach_prob, player, 1.0)
             
             # Track strategies at specified intervals
             if track_strategies and i % self.track_frequency == 0:
@@ -244,162 +226,3 @@ class CounterFactualRegret(Agent):
                 # If a strategy key is missing data, pad with the last known value
                 last_value = self.strategy_history[strategy_key][-1] if self.strategy_history[strategy_key] else 0.5
                 self.strategy_history[strategy_key].append(last_value)
-
-    def plot_strategy_evolution(self, info_set_keys: Optional[list] = None, 
-                            action_names: Optional[Dict[int, str]] = None,
-                            figsize: Tuple[int, int] = (12, 8)) -> None:
-        """
-        Plot the evolution of strategies over training iterations
-        """
-        if not self.iteration_history:
-            print("No strategy history available. Make sure to train with track_strategies=True")
-            return
-        
-        # Default action names
-        if action_names is None:
-            action_names = {0: 'Pass', 1: 'Bet'}
-        
-        # Filter information sets to plot
-        if info_set_keys is None:
-            info_set_keys = list(set(key.split('_action_')[0] for key in self.strategy_history.keys()))
-            info_set_keys = sorted(info_set_keys)  # Sort for consistent ordering
-        
-        # Create subplots
-        n_plots = len(info_set_keys)
-        if n_plots == 0:
-            print("No information sets found to plot")
-            return
-            
-        n_cols = min(3, n_plots)
-        n_rows = (n_plots + n_cols - 1) // n_cols
-        
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
-        if n_plots == 1:
-            axes = [axes]
-        elif n_rows == 1:
-            axes = axes.reshape(1, -1)
-        
-        axes_flat = axes.flatten() if n_plots > 1 else axes
-        
-        for i, info_set_key in enumerate(info_set_keys):
-            ax = axes_flat[i] if n_plots > 1 else axes_flat[0]
-            
-            # Find the maximum number of actions for this info set
-            max_actions = 0
-            for strategy_key in self.strategy_history.keys():
-                if strategy_key.startswith(f"{info_set_key}_action_"):
-                    action_idx = int(strategy_key.split('_action_')[1])
-                    max_actions = max(max_actions, action_idx + 1)
-            
-            # Plot each action's probability over time
-            for action_idx in range(max_actions):
-                strategy_key = f"{info_set_key}_action_{action_idx}"
-                if strategy_key in self.strategy_history:
-                    # Ensure data length matches iteration history
-                    data_length = min(len(self.iteration_history), len(self.strategy_history[strategy_key]))
-                    x_data = self.iteration_history[:data_length]
-                    y_data = self.strategy_history[strategy_key][:data_length]
-                    
-                    action_name = action_names.get(action_idx, f"Action {action_idx}")
-                    ax.plot(x_data, y_data, label=action_name, linewidth=2)
-            
-            ax.set_title(f"Strategy Evolution: {info_set_key}")
-            ax.set_xlabel("Training Iteration")
-            ax.set_ylabel("Action Probability")
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            ax.set_ylim(0, 1)
-        
-        # Hide unused subplots
-        for i in range(n_plots, len(axes_flat)):
-            axes_flat[i].set_visible(False)
-        
-        plt.tight_layout()
-        plt.show()
-
-    def plot_convergence_analysis(self, info_set_key: str, 
-                                action_names: Optional[Dict[int, str]] = None,
-                                theoretical_values: Optional[Dict[int, float]] = None,
-                                figsize: Tuple[int, int] = (10, 6)) -> None:
-        """
-        Plot convergence analysis for a specific information set
-        """
-        if action_names is None:
-            action_names = {0: 'Pass', 1: 'Bet'}
-        
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
-        
-        # Find available actions for this info set
-        available_actions = []
-        for strategy_key in self.strategy_history.keys():
-            if strategy_key.startswith(f"{info_set_key}_action_"):
-                action_idx = int(strategy_key.split('_action_')[1])
-                available_actions.append(action_idx)
-        
-        available_actions = sorted(available_actions)
-        
-        # Plot 1: Strategy evolution
-        for action_idx in available_actions:
-            strategy_key = f"{info_set_key}_action_{action_idx}"
-            if strategy_key in self.strategy_history:
-                # Ensure data length matches iteration history
-                data_length = min(len(self.iteration_history), len(self.strategy_history[strategy_key]))
-                x_data = self.iteration_history[:data_length]
-                y_data = self.strategy_history[strategy_key][:data_length]
-                
-                action_name = action_names.get(action_idx, f"Action {action_idx}")
-                ax1.plot(x_data, y_data, label=f"Learned {action_name}", linewidth=2)
-                
-                # Add theoretical line if provided
-                if theoretical_values and action_idx in theoretical_values:
-                    ax1.axhline(y=theoretical_values[action_idx], 
-                            color='red', linestyle='--', alpha=0.7,
-                            label=f"Theoretical {action_name}")
-        
-        ax1.set_title(f"Strategy Convergence: {info_set_key}")
-        ax1.set_xlabel("Training Iteration")
-        ax1.set_ylabel("Action Probability")
-        ax1.legend()
-        ax1.grid(True, alpha=0.3)
-        ax1.set_ylim(0, 1)
-        
-        # Plot 2: Convergence error (if theoretical values provided)
-        if theoretical_values:
-            for action_idx in available_actions:
-                strategy_key = f"{info_set_key}_action_{action_idx}"
-                if strategy_key in self.strategy_history and action_idx in theoretical_values:
-                    data_length = min(len(self.iteration_history), len(self.strategy_history[strategy_key]))
-                    errors = [abs(prob - theoretical_values[action_idx]) 
-                            for prob in self.strategy_history[strategy_key][:data_length]]
-                    x_data = self.iteration_history[:data_length]
-                    
-                    action_name = action_names.get(action_idx, f"Action {action_idx}")
-                    ax2.plot(x_data, errors, label=f"Error {action_name}", linewidth=2)
-            
-            ax2.set_title("Convergence Error")
-            ax2.set_xlabel("Training Iteration")
-            ax2.set_ylabel("Absolute Error")
-            ax2.legend()
-            ax2.grid(True, alpha=0.3)
-            ax2.set_yscale('log')
-        else:
-            ax2.text(0.5, 0.5, 'No theoretical values\nprovided', 
-                    transform=ax2.transAxes, ha='center', va='center')
-            ax2.set_title("Theoretical Comparison")
-        
-        plt.tight_layout()
-        plt.show()
-
-    def get_strategy_dataframe(self) -> pd.DataFrame:
-        """Get strategy evolution as a pandas DataFrame for easier analysis"""
-        if not self.iteration_history:
-            return pd.DataFrame()
-        
-        data = {'iteration': self.iteration_history}
-        
-        for strategy_key, values in self.strategy_history.items():
-            # Ensure data length matches iteration history
-            data_length = min(len(self.iteration_history), len(values))
-            data[strategy_key] = values[:data_length]
-        
-        return pd.DataFrame(data)
