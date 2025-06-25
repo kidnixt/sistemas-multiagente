@@ -4,175 +4,174 @@ from math import log, sqrt
 import numpy as np
 from typing import Callable, Optional
 import sys
+import random
+
 
 class MCTSNode:
-    def __init__(self, parent: 'MCTSNode', game: AlternatingGame, action: ActionType):
-        self.parent = parent
-        self.game = game
-        self.action = action
-        self.children = []
-        self.explored_children = 0
-        self.visits = 0
-        self.value = 0
-        self.cum_rewards = np.zeros(len(game.agents))
-        self.agent = self.game.agent_selection
+    """A node in the Monte‑Carlo search tree."""
 
-def ucb(node, C=sqrt(2)) -> float:
+    def __init__(self, parent: 'MCTSNode | None', game: AlternatingGame, action: Optional[ActionType]):
+        self.parent: 'MCTSNode | None' = parent
+        self.game: AlternatingGame = game          # cloned game state at this node
+        self.action: Optional[ActionType] = action  # action that led to this node (None for root)
+        self.children: list[MCTSNode] = []          # child nodes
+        self.visits: int = 0                       # visit count N(s)
+        self.cum_rewards: np.ndarray = np.zeros(len(game.agents), dtype=float)  # cumulative returns
+
+    # ------------------------------------------------------------------ #
+    def is_fully_expanded(self) -> bool:
+        """All legal actions already have child nodes."""
+        return len(self.children) == len(self.game.available_actions())
+
+
+# ---------------------------------------------------------------------- #
+#  Upper‑Confidence Bound (UCB1) used for child selection                #
+# ---------------------------------------------------------------------- #
+
+def ucb(node: MCTSNode, max_agent: AgentID, C: float = sqrt(2)) -> float:
+    """Upper‑Confidence Bound for Trees (UCT) score, seen from max_agent.
+
+    Works for *two‑player, zero‑sum* games.  The exploitation term is the
+    average reward of `max_agent` at that node; the exploration term biases
+    toward less‑visited nodes.
+    """
     if node.visits == 0:
-        return float('inf')  # Unvisited nodes get highest priority
-    
-    agent_idx = node.game.agent_name_mapping[node.agent]
-    return node.cum_rewards[agent_idx] / node.visits + C * sqrt(log(node.parent.visits)/node.visits)
+        return float("inf")
 
-def uct(node: MCTSNode, agent: AgentID) -> MCTSNode:
-    child = max(node.children, key=ucb)
-    return child
+    # Exploitation (average reward for the searching player)
+    idx = node.game.agent_name_mapping[max_agent]
+    avg_reward = node.cum_rewards[idx] / node.visits
+
+    # Exploration (sqrt(log N_parent / N_node))
+    parent_visits = node.parent.visits if node.parent else 1  # root: log(1)=0
+    exploration = C * sqrt(log(parent_visits) / node.visits)
+
+    return avg_reward + exploration
+
+
+def uct(node: MCTSNode, max_agent: AgentID) -> MCTSNode:
+    """Select the child with highest UCB score."""
+    return max(node.children, key=lambda child: ucb(child, max_agent))
+
+
+# ---------------------------------------------------------------------- #
+#  Main agent                                                            #
+# ---------------------------------------------------------------------- #
 
 class MonteCarloTreeSearch(Agent):
-    def __init__(self, game: AlternatingGame, agent: AgentID, simulations: int=100, rollouts: int=10,
-                 depth: Optional[int]=None, selection: Callable[[MCTSNode, AgentID], MCTSNode]=uct) -> None:
-        """
-        Parameters:
-            game: alternating game associated with the agent
-            agent: agent id of the agent in the game
-            simulations: number of MCTS simulations (default: 100)
-            rollouts: number of MC rollouts (default: 10)
-            selection: tree search policy (default: uct)
-        """
+    """Generic MCTS agent for two‑player, zero‑sum, alternating games."""
+
+    def __init__(
+        self,
+        game: AlternatingGame,
+        agent: AgentID,
+        simulations: int = 200,
+        rollouts: int = 8,
+        depth: Optional[int] = None,
+        selection_policy: Callable[[MCTSNode, AgentID], MCTSNode] = uct,
+    ) -> None:
         super().__init__(game=game, agent=agent)
         self.simulations = simulations
         self.rollouts = rollouts
-        self.selection = selection
         self.depth = depth
-        
-    def action(self) -> ActionType:
-        a, _ = self.mcts()
-        return a
+        self.selection_policy = selection_policy
 
-    def mcts(self) -> tuple[ActionType, float]:
+    # ------------------------------------------------------------------ #
+    # Public API                                                         #
+    # ------------------------------------------------------------------ #
+    def action(self) -> ActionType:
+        best_action, _ = self._mcts()
+        return best_action
+
+    # ------------------------------------------------------------------ #
+    # Core loop                                                          #
+    # ------------------------------------------------------------------ #
+    def _mcts(self) -> tuple[ActionType, float]:
         root = MCTSNode(parent=None, game=self.game.clone(), action=None)
 
-        for i in range(self.simulations):
-            node = root
+        for _ in range(self.simulations):
+            # 1. Selection
+            leaf = self._select(root)
+            # 2. Expansion
+            expanded = self._expand(leaf)
+            # 3. Simulation / roll‑out
+            rewards = self._rollout(expanded)
+            # 4. Back‑propagation
+            self._backpropagate(expanded, rewards)
 
-            node = self.select_node(node=node)
-            new_node = self.expand_node(node)
-            rewards = self.rollout(new_node)
-            self.backprop(new_node, rewards)
+        return self._best_child_action(root)
 
-        action, value = self.action_selection(root)
-        return action, value
-
-    def backprop(self, node, rewards):
+    # ------------------------------------------------------------------ #
+    # 1. Selection                                                        #
+    # ------------------------------------------------------------------ #
+    def _select(self, node: MCTSNode) -> MCTSNode:
         current = node
-        while current is not None:
-            # Update visit count
-            current.visits += 1
-            
-            # Update cumulative rewards for all agents
-            current.cum_rewards += rewards
-            
-            # Move to parent node
-            current = current.parent
+        while not current.game.terminated() and current.is_fully_expanded():
+            current = self.selection_policy(current, self.agent)
+        return current
 
-    def rollout(self, node):
-        rewards = np.zeros(len(self.game.agents))
-        
-        for _ in range(self.rollouts):
-            # Clone the game state from the node
-            rollout_game = node.game.clone()
-            
-            # Play randomly until the game terminates
-            depth = self.depth if self.depth is not None else sys.maxsize
-            while not rollout_game.terminated() and depth > 0:
-                depth -= 1
-                actions = rollout_game.available_actions()
-                # Choose a random action
-                random_action = np.random.choice(actions)
-                rollout_game.step(random_action)
-            
-            if rollout_game.terminated():
-                for i, agent in enumerate(self.game.agents):
-                    rewards[i] += rollout_game.reward(agent)
-            
-            if depth == 0:
-                for i, agent in enumerate(self.game.agents):
-                    rewards[i] += rollout_game.eval(agent)
-
-           # Get the final rewards and accumulate them
-            for i, agent in enumerate(self.game.agents):
-                rewards[i] += rollout_game.reward(agent)
-        
-        # Return average rewards across all rollouts
-        return rewards / self.rollouts
-    
-    # def select_node(self, node: MCTSNode) -> MCTSNode:
-    #     curr_node = node
-    #     while not curr_node.game.terminated():
-    #         actions = curr_node.game.available_actions()
-            
-    #         # If node has unexplored actions, return it
-    #         if len(curr_node.children) < len(actions):
-    #             return curr_node
-            
-    #         # All actions have been expanded - select among existing children
-    #         if curr_node.explored_children < len(curr_node.children):
-    #             # Select next unvisited child
-    #             curr_node = curr_node.children[curr_node.explored_children]
-    #             curr_node.explored_children += 1
-    #         else:
-    #             # All children visited - use selection policy (UCT)
-    #             curr_node = self.selection(curr_node, self.agent)
-     
-    #     return curr_node
-
-    def select_node(self, node: MCTSNode) -> MCTSNode:
-        curr_node = node
-        while not curr_node.game.terminated():
-            actions = curr_node.game.available_actions()
-            
-            # If node has unexplored actions, return it
-            if len(curr_node.children) < len(actions):
-                return curr_node
-            
-            # Use UCT selection directly for all children
-            curr_node = self.selection(curr_node, self.agent)
-    
-        return curr_node
-
-    def expand_node(self, node) -> MCTSNode:
+    # ------------------------------------------------------------------ #
+    # 2. Expansion                                                        #
+    # ------------------------------------------------------------------ #
+    def _expand(self, node: MCTSNode) -> MCTSNode:
         if node.game.terminated():
             return node
-        
-        actions = node.game.available_actions()
-        
-        # Only expand if there are unexplored actions
-        if len(node.children) < len(actions):
-            # Get the next action to expand
-            action = actions[len(node.children)]
-            
-            # Create child for this action
-            child_game = node.game.clone()
-            child_game.step(action)
-            child_node = MCTSNode(parent=node, game=child_game, action=action)
-            node.children.append(child_node)
-            return child_node  # Return the new child for immediate use
-        
+
+        explored_actions = {child.action for child in node.children}
+        for action in node.game.available_actions():
+            if action not in explored_actions:
+                next_game = node.game.clone()
+                next_game.step(action)
+                child = MCTSNode(parent=node, game=next_game, action=action)
+                node.children.append(child)
+                return child
+
+        # Should not happen (node fully expanded)
         return node
 
-    def action_selection(self, node: MCTSNode) -> tuple[ActionType, float]:
-        if not node.children:
-            return None, 0
-        
-        # Get the agent index for this player
-        agent_idx = self.game.agent_name_mapping[self.agent]
-        
-        # Find child with highest average reward for this agent
-        best_child = max(node.children, 
-                         key=lambda child: child.cum_rewards[agent_idx] / child.visits 
-                         if child.visits > 0 else 0)
-        
-        action = best_child.action
-        value = best_child.cum_rewards[agent_idx] / best_child.visits if best_child.visits > 0 else 0
-        
-        return action, value
+    # ------------------------------------------------------------------ #
+    # 3. Simulation / roll‑out                                            #
+    # ------------------------------------------------------------------ #
+    def _rollout(self, node: MCTSNode) -> np.ndarray:
+        cumulative = np.zeros(len(self.game.agents), dtype=float)
+
+        for _ in range(self.rollouts):
+            sim_game = node.game.clone()
+            remaining = self.depth if self.depth is not None else sys.maxsize
+
+            while not sim_game.terminated() and remaining > 0:
+                remaining -= 1
+                actions = sim_game.available_actions()
+                sim_game.step(random.choice(actions))
+
+            # Terminal or depth‑limit reward
+            if sim_game.terminated():
+                for i, aid in enumerate(self.game.agents):
+                    cumulative[i] += sim_game.reward(aid)
+            else:  # depth limit reached but not terminal
+                for i, aid in enumerate(self.game.agents):
+                    cumulative[i] += sim_game.eval(aid)
+
+        return cumulative / self.rollouts
+
+    # ------------------------------------------------------------------ #
+    # 4. Back‑propagation                                                 #
+    # ------------------------------------------------------------------ #
+    def _backpropagate(self, node: MCTSNode, rewards: np.ndarray) -> None:
+        current = node
+        while current is not None:
+            current.visits += 1
+            current.cum_rewards += rewards
+            current = current.parent
+
+    # ------------------------------------------------------------------ #
+    # Best action for the root                                            #
+    # ------------------------------------------------------------------ #
+    def _best_child_action(self, root: MCTSNode) -> tuple[ActionType, float]:
+        if not root.children:
+            return None, 0.0
+
+        idx = root.game.agent_name_mapping[self.agent]
+        best = max(root.children, key=lambda c: c.cum_rewards[idx] / c.visits)
+        value = best.cum_rewards[idx] / best.visits
+        return best.action, value
