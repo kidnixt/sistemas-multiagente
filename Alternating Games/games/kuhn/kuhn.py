@@ -62,19 +62,27 @@ class KuhnPoker(AlternatingGame):
         self.agent_selection = self.agents[self._player]
 
         if self._hist in self._terminalset:
-            # game over - compute rewards
-            if self._hist == 'pp':                  
-                # pass pass
-                _rewards = list(map(lambda p: 1 if p == np.argmax(self._hand) else -1, range(self.num_agents))) 
-            elif self._hist == 'pbp':               
-                # pass bet pass
-                _rewards = list(map(lambda p: 1 if p == 1 else -1, range(self.num_agents)))
-            elif self._hist == 'bp':                
-                # bet pass
-                _rewards = list(map(lambda p: 1 if p == 0 else -1, range(self.num_agents))) 
-            else:                                   
-                # pass bet bet OR bet bet
-                _rewards = list(map(lambda p: 2 if p == np.argmax(self._hand) else -2, range(self.num_agents)))              
+            history = self._hist
+            first = self.initial_player
+            second = 1 - first
+
+            if history == 'pp':
+                # showdown
+                winner = np.argmax(self._hand)
+                _rewards = [1 if p == winner else -1 for p in range(self.num_agents)]
+            elif history == 'pbp':
+                # player passes, second bets, first passes => second wins
+                _rewards = [1 if p == second else -1 for p in range(self.num_agents)]
+            elif history == 'bp':
+                # first bets, second folds => first wins
+                _rewards = [1 if p == first else -1 for p in range(self.num_agents)]
+            elif history in ['pbb', 'bb']:
+                # showdown with 2 chips
+                winner = np.argmax(self._hand)
+                _rewards = [2 if p == winner else -2 for p in range(self.num_agents)]
+            else:
+                raise ValueError(f"Unknown terminal history: {history}")
+              
         
             self.rewards = dict(map(lambda p: (p, _rewards[self.agent_name_mapping[p]]), self.agents))
             self.terminations = dict(map(lambda p: (p, True), self.agents))

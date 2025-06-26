@@ -141,7 +141,7 @@ class CounterFactualRegret(Agent):
                 self.game.reset()                
                 reach_prob = {p: 1.0 for p in self.game.agents}
                 self.cfr(self.game, reach_prob, player, 1.0)
-            
+                
             # Track strategies at specified intervals
             if track_strategies and i % self.track_frequency == 0:
                 self._track_current_strategies(i)
