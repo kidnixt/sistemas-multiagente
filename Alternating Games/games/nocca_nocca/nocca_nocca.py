@@ -154,6 +154,34 @@ class NoccaNocca(AlternatingGame):
 
         if self.terminated():
             return self.rewards[agent]
-    
+
         player = self.agent_name_mapping[agent]
-        return 0. * player
+        
+        my_score = 0
+        enemy_score = 0
+        
+        # UN SOLO BUCLE, CÁLCULOS MÍNIMOS
+        for row in range(ROWS):
+            for col in range(COLS):
+                stack = self.board.squares[row][col]
+                
+                # Contar piezas reales SIN crear lista
+                height = 0
+                top_piece = -1
+                for piece in stack:
+                    if piece != -1:
+                        height += 1
+                        top_piece = piece
+                
+                if height > 0:
+                    # Valor súper simple: altura + bonus centro
+                    value = height + (3 if 1 <= row <= 2 and 1 <= col <= 2 else 0)
+                    
+                    if top_piece == player:
+                        my_score += value
+                    else:
+                        enemy_score += value
+        
+        # Diferencia normalizada ultra-rápida
+        total = my_score + enemy_score
+        return (my_score - enemy_score) / (total + 1) if total > 0 else 0.0

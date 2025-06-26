@@ -89,28 +89,67 @@ class TicTacToe(AlternatingGame):
 
         if self.terminated():
             return self.rewards[agent]
-    
+
         grid = self.observe(agent)
-
-        E_agent = self._eval(grid, 2)
-        E_opponent = self._eval(grid, 1)
-        v = (E_agent - E_opponent) / 8.0
-
-        return v
-    
-    def _eval(self, grid, player) -> float:
-        rows = 0
+        
+        # Identificar jugadores (agent=2, opponent=1 según observe())
+        my_piece = 2
+        enemy_piece = 1
+        
+        my_score = 0
+        enemy_score = 0
+        
+        # Evaluar todas las líneas (filas, columnas, diagonales)
+        lines = []
+        
+        # Filas
         for i in range(3):
-            rows += int(all(grid[i] != player))
-
-        cols = 0
+            lines.append(grid[i])
+        
+        # Columnas  
         for i in range(3):
-            cols += int(all(grid.T[i] != player))           
-
-        diag1 = int(all(grid.diagonal() != player))
-        diag2 = int(all(np.fliplr(grid).diagonal() != player))
-
-        return (rows + cols + diag1 + diag2)
+            lines.append(grid[:, i])
+        
+        # Diagonales
+        lines.append(grid.diagonal())
+        lines.append(np.fliplr(grid).diagonal())
+        
+        # Evaluar cada línea
+        for line in lines:
+            my_count = np.sum(line == my_piece)
+            enemy_count = np.sum(line == enemy_piece)
+            empty_count = np.sum(line == 0)
+            
+            # Solo evaluar líneas no bloqueadas
+            if my_count > 0 and enemy_count > 0:
+                continue  # Línea bloqueada, sin valor
+            
+            if my_count == 2 and empty_count == 1:
+                my_score += 50  # ¡Amenaza de victoria!
+            elif my_count == 1 and empty_count == 2:
+                my_score += 10  # Línea con potencial
+            elif my_count == 0 and empty_count == 3:
+                my_score += 1   # Línea disponible
+                
+            if enemy_count == 2 and empty_count == 1:
+                enemy_score += 50  # ¡Amenaza enemiga!
+            elif enemy_count == 1 and empty_count == 2:
+                enemy_score += 10  # Línea enemiga con potencial
+            elif enemy_count == 0 and empty_count == 3:
+                enemy_score += 1   # Línea enemiga disponible
+        
+        # Bonus por centro (posición estratégica)
+        if grid[1, 1] == my_piece:
+            my_score += 5
+        elif grid[1, 1] == enemy_piece:
+            enemy_score += 5
+        
+        # Normalizar resultado
+        total = my_score + enemy_score
+        if total == 0:
+            return 0.0
+        
+        return (my_score - enemy_score) / total
 
     
     
