@@ -15,17 +15,28 @@ class MCTSNode:
         self.cum_rewards = np.zeros(len(game.agents))
         self.agent = game.agent_selection
 
+    def print_tree(self, agent: AgentID, depth=0):
+        indent = "  " * depth
+        agent_idx = self.game.agent_name_mapping[agent]
+        avg_reward = self.cum_rewards[agent_idx] / self.visits if self.visits > 0 else 0.0
+        print(f"{indent}Node | Action: {self.action} | Agent: {self.agent} | Visits: {self.visits} | Avg R[{agent}]: {avg_reward:.3f}")
+        for child in self.children:
+            child.print_tree(agent, depth + 1)
 
-def ucb(node, C=sqrt(2)) -> float:
+
+def ucb(node: MCTSNode, root_agent: AgentID, C=sqrt(2)) -> float:
     if node.visits == 0:
+        #print(f"[UCB] Action={node.action}, Visits=0 → ∞")
         return float('inf')
-    agent_idx = node.game.agent_name_mapping[node.agent]
-    return node.cum_rewards[agent_idx] / node.visits + C * sqrt(log(node.parent.visits) / node.visits)
+    agent_idx = node.game.agent_name_mapping[root_agent]
+    value = node.cum_rewards[agent_idx] / node.visits
+    bonus = C * sqrt(log(node.parent.visits) / node.visits)
+    ucb_val = value + bonus
+    #print(f"[UCB] Action={node.action}, Value={value:.3f}, Bonus={bonus:.3f}, UCB={ucb_val:.3f}")
+    return ucb_val
 
-
-def uct(node: MCTSNode, agent: AgentID) -> MCTSNode:
-    return max(node.children, key=ucb)
-
+def uct(node: MCTSNode, root_agent: AgentID) -> MCTSNode:
+    return max(node.children, key=lambda child: ucb(child, root_agent))
 
 class InformationSetMCTS(Agent):
     def __init__(self, game: AlternatingGame, agent: AgentID, simulations: int = 100, rollouts: int = 10,
@@ -54,6 +65,10 @@ class InformationSetMCTS(Agent):
             node = self.expand_node(node)
             rewards = self.rollout(node)
             self.backprop(node, rewards)
+
+        # root_key = self.get_info_key(self.game)
+        # root = self.tree[root_key]
+        # root.print_tree(self.agent)
 
         root_key = self.get_info_key(self.game)
         root = self.tree[root_key]
@@ -104,7 +119,7 @@ class InformationSetMCTS(Agent):
                 action = np.random.choice(actions)
                 rollout_game.step(action)
             for i, agent in enumerate(self.game.agents):
-                rewards[i] += rollout_game.reward(agent) or 0
+                rewards[i] += rollout_game.reward(agent)
         return rewards / self.rollouts
 
     def backprop(self, node: MCTSNode, rewards: np.ndarray) -> None:

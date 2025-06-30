@@ -130,11 +130,27 @@ class KuhnPoker(AlternatingGame):
         agent_idx = self.agent_name_mapping[agent]
         agent_card = self._hand[agent_idx]
         other_idx = 1 - agent_idx 
-        other_cards = self._cards.copy()
-        other_cards.pop(agent_card)
+
+        # Determine possible cards for the opponent
+        possible_cards = [c for c in self._cards if c != agent_card]
+
+        # Clone the game and assign a random one to the opponent
         new_game = self.clone()
-        new_game._hand[other_idx] = np.random.choice(other_cards)
+        new_game._hand[agent_idx] = agent_card  # redundant, but explicit
+        new_game._hand[other_idx] = np.random.choice(possible_cards)
+
+        new_game.observations = dict(
+        map(
+            lambda agent: (
+                agent,
+                {'card': new_game._hand[new_game.agent_name_mapping[agent]], 'hist': new_game._hist}
+            ),
+            new_game.agents
+        )
+    )
+
         return new_game
+
 
     def action_move(self, action: ActionType) -> str:
         if action not in range(self._num_actions):
