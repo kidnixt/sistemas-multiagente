@@ -128,3 +128,35 @@ class KuhnPoker3(AlternatingGame):
             raise ValueError(f"{action} is not a legal action.")
         
         return self._moves[action]
+    
+    def random_change(self, agent: AgentID):
+        agent_idx = self.agent_name_mapping[agent]
+        agent_card = self._hand[agent_idx]
+        
+        # Determine possible cards for the other players (excluding agent's card)
+        possible_cards = [c for c in self._cards if c != agent_card]
+        
+        # Clone the game and assign random cards to the other players
+        new_game = self.clone()
+        new_game._hand[agent_idx] = agent_card  # Keep agent's card the same
+        
+        # Get indices of other players
+        other_indices = [i for i in range(self.num_agents) if i != agent_idx]
+        
+        # Randomly assign remaining cards to other players
+        np.random.shuffle(possible_cards)
+        for i, other_idx in enumerate(other_indices):
+            new_game._hand[other_idx] = possible_cards[i]
+        
+        # Update observations for the new game state
+        new_game.observations = dict(
+            map(
+                lambda agent: (
+                    agent,
+                    {'card': new_game._hand[new_game.agent_name_mapping[agent]], 'hist': new_game._hist}
+                ),
+                new_game.agents
+            )
+        )
+        
+        return new_game
