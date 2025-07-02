@@ -1,0 +1,9 @@
+Configuration,Agent Role,Average Reward,Total Wins,Total Draws,Total Losses,Average Time (ms),S,R,D_mcts,D_minimax,agent_1_type,agent_2_type,matchup,Total Games
+MiniMax(D=1) vs Random,Black,1.0,10,0,0,11.5631103515625,0,0,0,1,MiniMax,Random,MiniMax vs Random,10
+MiniMax(D=1) vs Random,White,-1.0,0,0,10,0.6319620779582432,0,0,0,1,MiniMax,Random,MiniMax vs Random,10
+MiniMax(D=2) vs Random,Black,0.0,0,10,0,242.99065907796225,0,0,0,2,MiniMax,Random,MiniMax vs Random,10
+MiniMax(D=2) vs Random,White,0.0,0,10,0,0.6574821472167969,0,0,0,2,MiniMax,Random,MiniMax vs Random,10
+Random vs MiniMax(D=1),Black,0.0,0,10,0,0.6640132268269857,0,0,0,1,Random,MiniMax,Random vs MiniMax,10
+Random vs MiniMax(D=1),White,0.0,0,10,0,9.777949651082356,0,0,0,1,Random,MiniMax,Random vs MiniMax,10
+Random vs MiniMax(D=2),Black,0.0,0,10,0,0.6692870457967123,0,0,0,2,Random,MiniMax,Random vs MiniMax,10
+Random vs MiniMax(D=2),White,0.0,0,10,0,252.5301551818847,0,0,0,2,Random,MiniMax,Random vs MiniMax,10

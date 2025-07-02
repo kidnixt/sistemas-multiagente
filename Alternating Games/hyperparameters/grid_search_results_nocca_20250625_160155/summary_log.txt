@@ -1,0 +1,132 @@
+
+
+--- Análisis Final: Priorizando Victoria (WEIGHT_TIME = 1e-05) ---
+
+**MCTS (Agente X) vs Random (Agente O):**
+  Mejor Configuración: MCTS(S=30,R=1,D=1) vs Random
+  Score Combinado: -0.001
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 76.21 ms
+  Agente Principal (rol): Black
+
+**Random (Agente X) vs MCTS (Agente O):**
+  Mejor Configuración: Random vs MCTS(S=30,R=1,D=2)
+  Score Combinado: 0.999
+  Victorias: 10 (100.00%)
+  Empates: 0 (0.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 97.83 ms
+  Agente Principal (rol): White
+
+**MiniMax (Agente X) vs Random (Agente O):**
+  Mejor Configuración: MiniMax(D=1) vs Random
+  Score Combinado: 1.000
+  Victorias: 10 (100.00%)
+  Empates: 0 (0.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 15.09 ms
+  Agente Principal (rol): Black
+
+**Random (Agente X) vs MiniMax (Agente O):**
+  Mejor Configuración: Random vs MiniMax(D=1)
+  Score Combinado: -0.000
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 8.96 ms
+  Agente Principal (rol): White
+
+**MCTS (Agente X) vs MiniMax (Agente O):**
+  Mejor Configuración: MCTS(S=30,R=1,D=1) vs MiniMax(D=1)
+  Score Combinado: -0.001
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 72.32 ms
+  Agente Principal (rol): Black
+
+**MiniMax (Agente X) vs MCTS (Agente O):**
+  Mejor Configuración: MiniMax(D=1) vs MCTS(S=30,R=1,D=1)
+  Score Combinado: 0.100
+  Victorias: 1 (10.00%)
+  Empates: 9 (90.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 9.71 ms
+  Agente Principal (rol): Black
+
+**MCTS (Agente X) vs MCTS (Agente O):**
+  Mejor Configuración: MCTS(S=30,R=1,D=1) vs MCTS(S=30,R=2,D=2)
+  Score Combinado: -0.001
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 70.47 ms
+  Agente Principal (rol): Black
+
+
+--- Análisis Final: Priorizando Velocidad (WEIGHT_TIME = 0.01) ---
+
+**MCTS (Agente X) vs Random (Agente O):**
+  Mejor Configuración: MCTS(S=30,R=1,D=1) vs Random
+  Score Combinado: -0.762
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 76.21 ms
+  Agente Principal (rol): Black
+
+**Random (Agente X) vs MCTS (Agente O):**
+  Mejor Configuración: Random vs MCTS(S=30,R=1,D=1)
+  Score Combinado: 0.055
+  Victorias: 8 (80.00%)
+  Empates: 2 (20.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 74.46 ms
+  Agente Principal (rol): White
+
+**MiniMax (Agente X) vs Random (Agente O):**
+  Mejor Configuración: MiniMax(D=1) vs Random
+  Score Combinado: 0.849
+  Victorias: 10 (100.00%)
+  Empates: 0 (0.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 15.09 ms
+  Agente Principal (rol): Black
+
+**Random (Agente X) vs MiniMax (Agente O):**
+  Mejor Configuración: Random vs MiniMax(D=1)
+  Score Combinado: -0.090
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 8.96 ms
+  Agente Principal (rol): White
+
+**MCTS (Agente X) vs MiniMax (Agente O):**
+  Mejor Configuración: MCTS(S=30,R=1,D=1) vs MiniMax(D=1)
+  Score Combinado: -0.723
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 72.32 ms
+  Agente Principal (rol): Black
+
+**MiniMax (Agente X) vs MCTS (Agente O):**
+  Mejor Configuración: MiniMax(D=1) vs MCTS(S=30,R=1,D=1)
+  Score Combinado: 0.003
+  Victorias: 1 (10.00%)
+  Empates: 9 (90.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 9.71 ms
+  Agente Principal (rol): Black
+
+**MCTS (Agente X) vs MCTS (Agente O):**
+  Mejor Configuración: MCTS(S=30,R=1,D=1) vs MCTS(S=30,R=2,D=2)
+  Score Combinado: -0.705
+  Victorias: 0 (0.00%)
+  Empates: 10 (100.00%)
+  Derrotas: 0 (0.00%)
+  Tiempo Promedio/Acción: 70.47 ms
+  Agente Principal (rol): Black
